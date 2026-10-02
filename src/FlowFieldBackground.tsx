@@ -63,6 +63,16 @@ function isDark(documentEl: HTMLElement): boolean {
   return documentEl.classList.contains("dark");
 }
 
+/** Convert a `#rrggbb` (or `#rgb`) color to an `rgba()` string with the given alpha. */
+function hexToRgba(hex: string, alpha: number): string {
+  let h = hex.replace("#", "").trim();
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const n = parseInt(h, 16);
+  if (Number.isNaN(n) || h.length !== 6) return `rgba(0, 0, 0, ${alpha})`;
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function mountFlowField(
   host: HTMLElement,
   opts: {
@@ -230,11 +240,9 @@ function mountFlowField(
     prev = now;
     const t = (now - t0) / 1000;
 
-    // Gentle fade — produces the long trails.
-    const fade = BG === opts.darkBackground
-      ? "rgba(11, 16, 32, 0.06)"
-      : "rgba(251, 248, 240, 0.06)";
-    ctx.fillStyle = fade;
+    // Gentle fade — produces the long trails. Derives from the current
+    // background color so custom backgrounds still fade correctly.
+    ctx.fillStyle = hexToRgba(BG, 0.06);
     ctx.fillRect(0, 0, W, H);
 
     click.t = Math.max(0, click.t - dt * 1.2);
@@ -280,7 +288,8 @@ function mountFlowField(
 
     if (click.t > 0) {
       const r = (60 + 280 * (1 - click.t)) * DPR;
-      ctx.strokeStyle = `rgba(120, 160, 220, ${click.t * 0.3})`;
+      const [cr, cg, cb] = PAL[0] ?? [120, 160, 220];
+      ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${click.t * 0.3})`;
       ctx.lineWidth = 1.5 * DPR;
       ctx.beginPath();
       ctx.arc(click.x, click.y, r, 0, Math.PI * 2);
