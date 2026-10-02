@@ -1,0 +1,25 @@
+{
+  "name": "flow-field-background",
+  "version": "1.0.0",
+  "description": "Dependency-free animated flow-field background (React + TypeScript), adapted from the Zetra Flow Field wallpaper (MIT).",
+  "license": "MIT",
+  "keywords": [
+    "flow-field",
+    "canvas",
+    "background",
+    "animation",
+    "react",
+    "particles",
+    "generative-art"
+  ],
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "react": ">=17",
+    "react-dom": ">=17"
+  },
+  "devDependencies": {
+    "typescript": ">=5"
+  }
+}
