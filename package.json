@@ -10,16 +10,21 @@
     "animation",
     "react",
     "particles",
-    "generative-art"
+    "generative-art",
+    "typescript"
   ],
+  "main": "src/FlowFieldBackground.tsx",
+  "types": "src/FlowFieldBackground.tsx",
   "files": [
     "src"
   ],
+  "sideEffects": false,
   "peerDependencies": {
     "react": ">=17",
     "react-dom": ">=17"
   },
   "devDependencies": {
+    "@types/react": ">=18",
     "typescript": ">=5"
   }
 }

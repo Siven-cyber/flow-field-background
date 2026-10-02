@@ -10,14 +10,17 @@ maintained here as a standalone, self-contained reference.
 
 ## Features
 
-- **Zero dependencies** — pure Canvas 2D + a small value-noise hash, no Perlin lib.
+- **Zero runtime dependencies** — pure Canvas 2D + a small value-noise hash, no
+  Perlin library, no CSS framework required (styles are inline).
 - **Performance-aware** — particle count scales with viewport area; DPR capped;
   animation pauses when the tab is hidden (`visibilitychange`).
-- **Accessible** — honors `prefers-reduced-motion: reduce` (falls back to the CSS
+- **Accessible** — honors `prefers-reduced-motion: reduce` (falls back to a CSS
   gradient only); the canvas is `pointer-events: none` so it never blocks input.
 - **Themeable** — light/dark palettes with a `MutationObserver` that follows the
-  `dark` class on `<html>` live, no reload needed.
+  `dark` class on `<html>` live, no reload needed. Colors are fully configurable.
 - **Interactive** — cursor swirl and click ripple.
+- **Framework-friendly** — a single React component with no Tailwind / CSS-module
+  assumptions.
 
 ## Usage
 
@@ -25,41 +28,70 @@ The component is written for **React + TypeScript** (Next.js App Router works ou
 of the box via the `"use client"` directive).
 
 ```tsx
-import FlowFieldBackground from "./src/FlowFieldBackground";
+import FlowFieldBackground from "flow-field-background";
 
 export default function Layout({ children }) {
   return (
     <>
       <FlowFieldBackground />
-      <main className="relative z-10">{children}</main>
+      <main style={{ position: "relative", zIndex: 10 }}>{children}</main>
     </>
   );
 }
 ```
 
 The background renders a fixed, full-viewport `<div>` at `z-index: 0` with
-`pointer-events: none` and a soft radial-gold gradient fallback. Put your page
-content in a sibling with a higher `z-index`.
+`pointer-events: none`. Put your page content in a sibling with a higher
+`z-index`.
 
-### Recoloring
+### Customizing colors
 
-Edit the two palette constants inside `FlowFieldBackground.tsx`:
+Every color is a prop. Palettes are arrays of `[r, g, b]` tuples.
 
-- `PAL_DARK` — colors used in dark mode.
-- `PAL_LIGHT` — colors used in light mode.
+```tsx
+<FlowFieldBackground
+  darkPalette={[
+    [88, 132, 200],
+    [74, 158, 212],
+    [104, 196, 178],
+    [163, 230, 210],
+  ]}
+  lightPalette={[
+    [52, 84, 140],
+    [36, 110, 160],
+    [32, 140, 124],
+    [24, 92, 116],
+  ]}
+  darkBackground="#0b1020"
+  lightBackground="#fbf8f0"
+/>
+```
 
-Each entry is an `[r, g, b]` tuple. The background color is set via `BG`
-(`#0b1020` dark / `#fbf8f0` light by default).
+| Prop | Type | Default | Description |
+| --- | --- | --- | --- |
+| `darkPalette` | `[number, number, number][]` | neutral blue/teal ramp | Colors in dark mode |
+| `lightPalette` | `[number, number, number][]` | neutral blue/teal ramp | Colors in light mode |
+| `darkBackground` | `string` | `#0b1020` | Solid backdrop (dark) |
+| `lightBackground` | `string` | `#fbf8f0` | Solid backdrop (light) |
+| `forceDark` | `boolean` | `undefined` | Override theme detection |
+| `fallbackGradient` | `string` | soft radial glow | CSS gradient behind the canvas |
+| `style` | `CSSProperties` | — | Extra inline styles |
+| `className` | `string` | — | Extra class |
+
+### Theme detection
+
+By default the component follows the `dark` class on `<html>` (a common
+convention used by Tailwind's dark mode, next-themes, and others). If you use a
+different mechanism, pass `forceDark` explicitly.
 
 ## How it works
 
 1. A value-noise field (`hash21` + smoothstep interpolation) drives a
    `fieldAngle(x, y, t)` used to steer each particle.
-2. Every frame the canvas is filled with a low-alpha `rgba(bg, 0.06)` fade,
-   then particles are drawn as short line segments — the fade produces the
-   long trailing effect.
-3. Mouse position adds a tangential swirl; a click pushes particles outward
-   and draws an expanding ring.
+2. Every frame the canvas is filled with a low-alpha fade, then particles are
+   drawn as short line segments — the fade produces the long trailing effect.
+3. Mouse position adds a tangential swirl; a click pushes particles outward and
+   draws an expanding ring.
 
 ## License
 

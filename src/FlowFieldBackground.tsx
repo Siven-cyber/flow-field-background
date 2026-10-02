@@ -1,50 +1,106 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { CSSProperties } from "react";
 
 /**
- * Latar "Flow Field" untuk halaman admin.
- * Diadaptasi dari wallpaper Zetra Flow Field (MIT) agar aman & hemat di halaman
- * sungguhan: canvas tidak menangkap pointer, animasi berhenti saat tab tersembunyi,
- * jumlah partikel mengikuti luas layar, dan menghormati prefers-reduced-motion.
+ * Flow Field background — an animated, dependency-free canvas backdrop.
  *
- * Warna mengikuti tema (light/dark) dengan aksen brand emas LapakVIP.
+ * Hundreds of particles drift along a value-noise vector field, leaving soft
+ * trails, with optional mouse swirl and click ripples. Adapted from the
+ * "Zetra Flow Field" wallpaper concept (MIT).
+ *
+ * Safe & frugal by default:
+ *   - canvas never captures pointer events
+ *   - animation pauses when the tab is hidden (visibilitychange)
+ *   - particle count scales with viewport area
+ *   - honors `prefers-reduced-motion: reduce` (falls back to a CSS gradient)
+ *   - no dependencies beyond React
+ *
+ * Theme is driven by the `dark` class on <html> (a common convention), or you
+ * can force it via the `forceDark` prop. Colors are fully configurable.
  */
 
-function mountFlowField(host: HTMLElement): () => void {
+export type RGB = [number, number, number];
+
+export interface FlowFieldBackgroundProps {
+  /** Colors used in dark mode. Defaults to a neutral blue/teal ramp. */
+  darkPalette?: RGB[];
+  /** Colors used in light mode. Defaults to a neutral blue/teal ramp. */
+  lightPalette?: RGB[];
+  /** Solid backdrop color for dark mode. */
+  darkBackground?: string;
+  /** Solid backdrop color for light mode. */
+  lightBackground?: string;
+  /** Override theme detection (true = dark, false = light, undefined = auto). */
+  forceDark?: boolean;
+  /** Optional CSS gradient layered behind the canvas (e.g. a radial glow). */
+  fallbackGradient?: string;
+  /** Optional extra inline styles on the wrapper element. */
+  style?: CSSProperties;
+  /** Optional className on the wrapper element. */
+  className?: string;
+}
+
+const DEFAULT_DARK: RGB[] = [
+  [88, 132, 200], // steel blue
+  [74, 158, 212], // sky
+  [104, 196, 178], // teal
+  [163, 230, 210], // mint
+];
+
+const DEFAULT_LIGHT: RGB[] = [
+  [52, 84, 140], // deep blue
+  [36, 110, 160], // ocean
+  [32, 140, 124], // teal
+  [24, 92, 116], // dark cyan
+];
+
+const DEFAULT_DARK_BG = "#0b1020";
+const DEFAULT_LIGHT_BG = "#fbf8f0";
+
+function isDark(documentEl: HTMLElement): boolean {
+  return documentEl.classList.contains("dark");
+}
+
+function mountFlowField(
+  host: HTMLElement,
+  opts: {
+    darkPalette: RGB[];
+    lightPalette: RGB[];
+    darkBackground: string;
+    lightBackground: string;
+    forceDark: boolean | undefined;
+  }
+): () => void {
+  if (typeof window === "undefined") return () => {};
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {};
 
-  const isDark = () =>
-    typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  const detectDark = () =>
+    opts.forceDark !== undefined
+      ? opts.forceDark
+      : isDark(document.documentElement);
 
   const canvas = document.createElement("canvas");
-  canvas.className = "pointer-events-none absolute inset-0 block h-full w-full";
+  canvas.style.position = "absolute";
+  canvas.style.inset = "0";
+  canvas.style.display = "block";
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  canvas.style.pointerEvents = "none";
   host.prepend(canvas);
   const ctx = canvas.getContext("2d", { alpha: false })!;
 
   let W = 0, H = 0, DPR = 1;
   let lastW = 0, lastH = 0;
-  let BG = isDark() ? "#0b1020" : "#fbf8f0";
+  let BG = detectDark() ? opts.darkBackground : opts.lightBackground;
 
-  // Palet per tema: emas gelap di light, emas terang di dark.
-  const PAL_DARK = [
-    [227, 168, 31],  // brand-400
-    [235, 192, 74],  // brand-300
-    [242, 216, 134], // brand-200
-    [255, 214, 120], // cahaya emas
-  ];
-  const PAL_LIGHT = [
-    [168, 109, 12],  // brand-600
-    [201, 137, 15],  // brand-500
-    [227, 168, 31],  // brand-400
-    [110, 67, 17],   // brand-800
-  ];
-  let PAL = isDark() ? PAL_DARK : PAL_LIGHT;
+  let PAL = detectDark() ? opts.darkPalette : opts.lightPalette;
 
   function applyTheme() {
-    const dark = isDark();
-    BG = dark ? "#0b1020" : "#fbf8f0";
-    PAL = dark ? PAL_DARK : PAL_LIGHT;
+    const dark = detectDark();
+    BG = dark ? opts.darkBackground : opts.lightBackground;
+    PAL = dark ? opts.darkPalette : opts.lightPalette;
     ctx.fillStyle = BG;
     ctx.fillRect(0, 0, W, H);
   }
@@ -66,19 +122,24 @@ function mountFlowField(host: HTMLElement): () => void {
   }
 
   const fieldAngle = (x: number, y: number, t: number) =>
-    (vnoise(x * 0.0016, y * 0.0016 + t * 0.04) + 0.5 * vnoise(x * 0.0036 + t * 0.02, y * 0.0036)) * Math.PI * 2;
+    (vnoise(x * 0.0016, y * 0.0016 + t * 0.04) +
+      0.5 * vnoise(x * 0.0036 + t * 0.02, y * 0.0036)) *
+    Math.PI *
+    2;
 
   /* ------------------------------- particles ------------------------------ */
 
   let parts: { x: number; y: number; vx: number; vy: number; life: number; hueT: number; size: number }[] = [];
   let COUNT = 0;
 
-  const targetCount = () => Math.max(120, Math.min(520, Math.round((window.innerWidth * window.innerHeight) / 3000)));
+  const targetCount = () =>
+    Math.max(120, Math.min(520, Math.round((window.innerWidth * window.innerHeight) / 3000)));
 
   const spawn = () => ({
     x: Math.random() * W,
     y: Math.random() * H,
-    vx: 0, vy: 0,
+    vx: 0,
+    vy: 0,
     life: Math.random() * 240 + 120,
     hueT: Math.pow(Math.random(), 2.2),
     size: 0.7 + Math.random() * 1.6,
@@ -159,7 +220,7 @@ function mountFlowField(host: HTMLElement): () => void {
   };
   document.addEventListener("visibilitychange", onVisibility);
 
-  // Ikuti pergantian tema (class dark di html) tanpa perlu reload.
+  // Follow the theme (dark class on <html>) live, without a reload.
   const themeObs = new MutationObserver(() => applyTheme());
   themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 
@@ -169,8 +230,10 @@ function mountFlowField(host: HTMLElement): () => void {
     prev = now;
     const t = (now - t0) / 1000;
 
-    // Fade lembut — pembentuk jejak panjang.
-    const fade = BG === "#0b1020" ? "rgba(11, 16, 32, 0.06)" : "rgba(251, 248, 240, 0.06)";
+    // Gentle fade — produces the long trails.
+    const fade = BG === opts.darkBackground
+      ? "rgba(11, 16, 32, 0.06)"
+      : "rgba(251, 248, 240, 0.06)";
     ctx.fillStyle = fade;
     ctx.fillRect(0, 0, W, H);
 
@@ -217,7 +280,7 @@ function mountFlowField(host: HTMLElement): () => void {
 
     if (click.t > 0) {
       const r = (60 + 280 * (1 - click.t)) * DPR;
-      ctx.strokeStyle = `rgba(227, 168, 31, ${click.t * 0.3})`;
+      ctx.strokeStyle = `rgba(120, 160, 220, ${click.t * 0.3})`;
       ctx.lineWidth = 1.5 * DPR;
       ctx.beginPath();
       ctx.arc(click.x, click.y, r, 0, Math.PI * 2);
@@ -242,25 +305,40 @@ function mountFlowField(host: HTMLElement): () => void {
   };
 }
 
-export default function FlowFieldBackground() {
+export default function FlowFieldBackground({
+  darkPalette = DEFAULT_DARK,
+  lightPalette = DEFAULT_LIGHT,
+  darkBackground = DEFAULT_DARK_BG,
+  lightBackground = DEFAULT_LIGHT_BG,
+  forceDark,
+  fallbackGradient = "radial-gradient(120% 90% at 50% -15%, rgba(88,132,200,0.12), transparent 62%), radial-gradient(70% 55% at 88% 104%, rgba(104,196,178,0.08), transparent 64%)",
+  style,
+  className,
+}: FlowFieldBackgroundProps) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const cleanup = mountFlowField(host);
+    const cleanup = mountFlowField(host, {
+      darkPalette,
+      lightPalette,
+      darkBackground,
+      lightBackground,
+      forceDark,
+    });
     return cleanup;
-  }, []);
+  }, [darkPalette, lightPalette, darkBackground, lightBackground, forceDark]);
 
-  return (
-    <div
-      ref={hostRef}
-      aria-hidden
-      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
-      style={{
-        background:
-          "radial-gradient(120% 90% at 50% -15%, rgba(227,168,31,0.10), transparent 62%), radial-gradient(70% 55% at 88% 104%, rgba(227,168,31,0.06), transparent 64%)",
-      }}
-    />
-  );
+  const wrapperStyle: CSSProperties = {
+    position: "fixed",
+    inset: 0,
+    zIndex: 0,
+    overflow: "hidden",
+    pointerEvents: "none",
+    background: fallbackGradient,
+    ...style,
+  };
+
+  return <div ref={hostRef} aria-hidden className={className} style={wrapperStyle} />;
 }
